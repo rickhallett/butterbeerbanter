@@ -1,12 +1,23 @@
+# Table of Contents
+
+- [Butter Beer Banter](#butter-beer-banter)
+  - [Outlines](#outlines)
+  - [Examples](#examples)
+  - [Enhancements](#enhancements)
+  - [Deployment](#deployment)
+  - [SQL stuff](#sql-stuff)
+  - [Test stuff](#test-stuff)
+
 # Butter Beer Banter
 
 ```python
 from hogwarts import Wizard
 from ministry import client
 
+dumbledore = Wizard()
+harry = Wizard()
+
 def send(message):
-    dumbledore = Wizard()
-    harry = Wizard()
     try:
         sent = client.send(dumbledore, message)
 	if sent:
@@ -23,35 +34,41 @@ def send(message):
 ## Outlines
 
 ### Basic Server
-    
+
 Building a local server for a chat application involves creating a central point that can handle incoming connections, manage users, and relay messages between them. Here's a high-level overview of the steps you'd follow using Python's standard library:
 
-1. **Set Up the Server Socket**: 
+1. **Set Up the Server Socket**:
+
    - Use the `socket` library to create a socket that will listen for incoming connections.
    - Bind it to a local IP address (like `127.0.0.1`) and a port number.
 
-2. **Listen for Incoming Connections**: 
+2. **Listen for Incoming Connections**:
+
    - Put the server socket into listening mode so that it can accept connections.
    - When a client connects, accept the connection and create a new socket specifically for that client.
 
-3. **Handling Multiple Clients**: 
+3. **Handling Multiple Clients**:
+
    - Use the `threading` or `asyncio` library to manage multiple connections so that the server can communicate with several clients simultaneously.
    - Each client connection should be handled in its own thread or asynchronous task to allow for concurrent processing.
 
-4. **Managing Client Sessions**: 
+4. **Managing Client Sessions**:
+
    - Assign a unique identifier to each client, or use the client's address as an identifier.
    - Maintain a list or dictionary of clients to keep track of active connections.
 
-5. **Message Relaying**: 
+5. **Message Relaying**:
+
    - Receive messages from clients, process them as needed (e.g., checking for commands or managing user lists), and then relay those messages to other clients.
    - Implement a protocol for your messages, such as JSON, to structure the data being sent and received.
 
-6. **Building the Client Application**: 
+6. **Building the Client Application**:
+
    - The client application will also use the `socket` library to connect to the server.
    - It should have a user interface for inputting and displaying messages.
    - The client handles sending messages to the server and receiving messages from the server.
 
-7. **Shutting Down**: 
+7. **Shutting Down**:
    - Provide a way for the server to gracefully shut down, closing all client connections and releasing resources.
 
 ### Enhanced Client
@@ -59,57 +76,71 @@ Building a local server for a chat application involves creating a central point
 Client-side features can greatly enhance the user experience by making the chat application more interactive and user-friendly. Here are some features you could consider developing for the chat client:
 
 1. **User Interface (UI) Enhancements**:
+
    - Implement a graphical user interface (GUI) using libraries like `tkinter`, `PyQt`, or `Kivy`.
    - Display user list in the chat so participants can see who is online.
    - Use colors and fonts to differentiate between system messages, your messages, and others' messages.
 
 2. **Message Notifications**:
+
    - Add desktop notifications for new messages when the chat window is not in focus.
    - Implement sound notifications for incoming messages.
 
 3. **Direct Messages (DM)**:
+
    - Allow users to send private messages to each other.
    - Use a command like `/dm username message` to send a direct message.
 
 4. **File Sharing**:
+
    - Enable users to share files through the chat.
    - Implement file transfer using sockets to send binary data.
 
 5. **Emoji and Stickers Support**:
+
    - Allow users to send emojis and stickers.
    - Translate certain text patterns into emojis (e.g., `:)` to 🙂).
 
 6. **Command Shortcuts**:
+
    - Implement shortcuts for frequently used commands.
    - For example, `/q` could be a shortcut for `/quit`.
 
 7. **Message Formatting**:
+
    - Support for markdown or simple text formatting (bold, italics, underline).
    - Parse and format the messages on the client side before sending or displaying them.
 
 8. **Chat History**:
+
    - Store chat history locally and allow users to scroll back through their chat.
    - Add search functionality to the chat history.
 
 9. **Customization Options**:
+
    - Allow users to customize the chat interface, such as changing the theme or color scheme.
    - Enable font size adjustments for better readability.
 
 10. **Connection Status**:
+
     - Indicate when the client is connecting, connected, or disconnected from the server.
     - Automatic reconnection attempts on unexpected disconnections.
 
 11. **Security Features**:
+
     - Encrypt messages before sending them over the network.
     - Implement a user authentication feature upon connection to the server.
 
 12. **Real-time Typing Indicators**:
+
     - Show an indicator when someone is typing a message.
 
 13. **Message Time Stamps**:
+
     - Display the time when a message was sent next to the message.
 
 14. **Language Localization**:
+
     - Support multiple languages and allow users to choose their preferred language for the UI.
 
 15. **User Profiles and Avatars**:
@@ -179,6 +210,7 @@ def receive():
 print("Server is listening...")
 receive()
 ```
+
 ### Enhanced Server
 
 Below is an enhanced version of the chat server script with the following additional features:
@@ -279,7 +311,7 @@ Keep in mind that this script is still a basic example for learning purposes and
 
 To handle user registration and authentication with a SQLite database, you would need to add functionality to the server script to interact with the database. This would include creating tables for storing user credentials, functions for registering new users, and functions for authenticating users during login.
 
-Below is an example script that includes SQLite database integration for user registration and authentication. 
+Below is an example script that includes SQLite database integration for user registration and authentication.
 
 **Note**: This is a simple example for educational purposes. Passwords should never be stored in plain text in a production environment; they should be hashed using a library like `bcrypt`.
 
@@ -363,13 +395,13 @@ def receive():
         # Registration or Login
         client.send('REGISTER or LOGIN'.encode('ascii'))
         response = client.recv(1024).decode('ascii')
-        
+
         if response.lower() == 'register':
             client.send('USERNAME'.encode('ascii'))
             username = client.recv(1024).decode('ascii')
             client.send('PASSWORD'.encode('ascii'))
             password = client.recv(1024).decode('ascii')
-            
+
             if register_new_user(username, password):
                 client.send('REGISTERED'.encode('ascii'))
             else:
@@ -382,7 +414,7 @@ def receive():
             username = client.recv(1024).decode('ascii')
             client.send('PASSWORD'.encode('ascii'))
             password = client.recv(1024).decode('ascii')
-            
+
             if authenticate_user(username, password):
                 client.send('LOGGEDIN'.encode('ascii'))
                 clients.append(client)
@@ -479,7 +511,7 @@ def handle(client, username):
 def receive():
     while True:
         # ... existing connection handling code ...
-        
+
         # Pass the username to the handle function
         thread = threading.Thread(target=handle, args=(client, username))
         thread.start()
@@ -637,29 +669,29 @@ class ChatClient(tk.Tk):
 
     def create_menu(self):
         menu_bar = tk.Menu(self)
-        
+
         file_menu = tk.Menu(menu_bar, tearoff=0)
         file_menu.add_command(label="Connect", command=self.connect)
         file_menu.add_command(label="Disconnect", command=self.disconnect)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.exit_app)
-        
+
         edit_menu = tk.Menu(menu_bar, tearoff=0)
         edit_menu.add_command(label="Settings", command=self.open_settings)
-        
+
         help_menu = tk.Menu(menu_bar, tearoff=0)
         help_menu.add_command(label="About", command=self.show_about)
 
         menu_bar.add_cascade(label="File", menu=file_menu)
         menu_bar.add_cascade(label="Edit", menu=edit_menu)
         menu_bar.add_cascade(label="Help", menu=help_menu)
-        
+
         self.config(menu=menu_bar)
 
     def create_chat_display(self):
         self.chat_display = scrolledtext.ScrolledText(self, state='disabled', wrap='word')
         self.chat_display.grid(row=0, column=0, columnspan=2, sticky="nsew")
-        
+
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -720,26 +752,33 @@ Remember, as you add features, keep user privacy and data security in mind. Alwa
 Design patterns can significantly enhance the structure and maintainability of code. In the context of your chat server and client applications, several design patterns could be applied:
 
 1. **Command Pattern**:
+
    - For parsing and executing different types of messages or commands received from the client.
    - This would separate the command logic from the main communication logic.
 
 2. **Observer Pattern**:
+
    - The server can use this pattern to notify all connected clients (observers) of new messages or events.
    - In the client, this pattern could be used to update the chat UI whenever a new message is received.
 
 3. **Factory Pattern**:
+
    - If you extend the client application to handle different types of communication or message formats, a factory pattern could provide a way to create different parser objects based on the message type.
 
 4. **Singleton Pattern**:
+
    - The server configuration (like IP address and port) could be implemented as a singleton to ensure that only one instance of the configuration exists throughout the application's lifecycle.
 
 5. **Decorator Pattern**:
+
    - To add additional behaviors to the communication channels dynamically. For example, you could use decorators to add encryption or compression to the messages being sent and received.
 
 6. **Strategy Pattern**:
+
    - This could be used to change the algorithm of how messages are processed or how the connection is handled without affecting the client class that uses the algorithm.
 
 7. **State Pattern**:
+
    - For managing the state of the connection (e.g., connected, disconnected, reconnecting) in a more organized manner.
 
 8. **Template Method Pattern**:
@@ -766,7 +805,7 @@ def apply_formatting(message):
     formatted_message = message
     bold_ranges = [(m.start(1), m.end(1)) for m in re.finditer(bold_pattern, message)]
     italics_ranges = [(m.start(1), m.end(1)) for m in re.finditer(italics_pattern, message)]
-    
+
     # Sort ranges in reverse order to not mess up indices while replacing
     for start, end in sorted(bold_ranges + italics_ranges, reverse=True):
         formatted_message = formatted_message[:start] + formatted_message[start:end] + formatted_message[end:]
@@ -776,17 +815,17 @@ def apply_formatting(message):
 def add_message_to_chatbox(chatbox, message):
     # Apply formatting
     formatted_message, bold_ranges, italics_ranges = apply_formatting(message)
-    
+
     # Insert the message into the chatbox
     chatbox.configure(state='normal')
     start_index = chatbox.index('end')
     chatbox.insert('end', formatted_message + '\n')
     end_index = chatbox.index('end')
-    
+
     # Apply bold tag where needed
     for start, end in bold_ranges:
         chatbox.tag_add('bold', f"{start_index}+{start}c", f"{start_index}+{end}c")
-    
+
     # Apply italics tag where needed
     for start, end in italics_ranges:
         chatbox.tag_add('italics', f"{start_index}+{start}c", f"{start_index}+{end}c")
@@ -812,7 +851,7 @@ Keep in mind that this is a basic example. For more complex markdown-like format
 
 ### More parsing
 
-For more complex parsing, including nested formatting like bold within italics or vice versa, you would typically use a parsing library or write a custom parser that can handle such cases. Below is an example using Python's standard `re` module to handle non-overlapping and overlapping bold and italics markdown-like syntax. 
+For more complex parsing, including nested formatting like bold within italics or vice versa, you would typically use a parsing library or write a custom parser that can handle such cases. Below is an example using Python's standard `re` module to handle non-overlapping and overlapping bold and italics markdown-like syntax.
 
 The following code will be an extension of the previous example, improving the parsing of the formatted text:
 
@@ -831,7 +870,7 @@ def apply_complex_formatting(text_widget, message, start='1.0'):
     """
     # Escape special characters in tags
     message = message.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    
+
     # Search for all formatting patterns
     formatting_spans = []
     for match in bold_pattern.finditer(message):
@@ -849,7 +888,7 @@ def apply_complex_formatting(text_widget, message, start='1.0'):
         if start_idx > last_end:
             plain_text = message[last_end:start_idx]
             text_widget.insert('end', plain_text)
-        
+
         # Insert the formatted text and apply the tag
         text_widget.insert('end', content)
         content_start = text_widget.index(f"{start}+{text_widget.index('end')} - {len(content)} chars")
@@ -888,25 +927,31 @@ The Tkinter `Text` widget allows us to add multiple tags to the same range of te
 Hosting the chat server remotely and allowing HTTP connections from authenticated clients involves several steps. Here's an overview of how you might do this, with a focus on authentication and remote hosting:
 
 1. **Choose a Hosting Environment**:
+
    - Select a cloud provider or a remote hosting service where you can deploy your server application.
 
 2. **Server Setup for HTTP**:
+
    - Modify the server to handle HTTP requests. You can use the `http.server` or `flask` library for a more feature-rich application.
    - Ensure the server listens on a public IP address or hostname provided by the hosting service.
 
 3. **Secure the Connection**:
+
    - Implement SSL/TLS to encrypt the data transmission. This could involve using a library like `ssl` to wrap your server's socket.
    - Obtain an SSL certificate, which can be a free one from Let's Encrypt or a paid one from another certificate authority.
 
 4. **Implement Authentication**:
+
    - Create an authentication system that requires clients to provide credentials before they can send messages.
    - For a simple HTTP-based auth, you can use HTTP Basic Auth; for more security, consider using tokens like JWT (JSON Web Tokens) which can be implemented using additional libraries like `PyJWT`.
    - Store and manage user credentials securely, ideally using a database and hashing passwords with a library like `bcrypt`.
 
 5. **Firewall Configuration**:
+
    - Configure the server's firewall to allow incoming connections on the HTTP port (typically port 80, or 443 for HTTPS).
 
 6. **Address-Based Filtering**:
+
    - Implement IP filtering to allow or block requests based on the client's IP address.
    - This could be part of your application logic or could be set up as part of the firewall settings on your server.
 
@@ -1080,10 +1125,10 @@ spec:
         app: chat-server
     spec:
       containers:
-      - name: chat-server
-        image: gcr.io/[PROJECT-ID]/chat-server-image
-        ports:
-        - containerPort: 12345
+        - name: chat-server
+          image: gcr.io/[PROJECT-ID]/chat-server-image
+          ports:
+            - containerPort: 12345
 ```
 
 Save this to a file named `deployment.yaml` and apply it with `kubectl`:
@@ -1190,17 +1235,17 @@ spec:
         app: chat-server
     spec:
       containers:
-      - name: chat-server
-        image: gcr.io/[PROJECT-ID]/chat-server-image
-        ports:
-        - containerPort: 12345
-        volumeMounts:
-        - mountPath: "/usr/src/app/db"
-          name: sqlite-storage
+        - name: chat-server
+          image: gcr.io/[PROJECT-ID]/chat-server-image
+          ports:
+            - containerPort: 12345
+          volumeMounts:
+            - mountPath: "/usr/src/app/db"
+              name: sqlite-storage
       volumes:
-      - name: sqlite-storage
-        persistentVolumeClaim:
-          claimName: sqlite-db-claim
+        - name: sqlite-storage
+          persistentVolumeClaim:
+            claimName: sqlite-db-claim
 ```
 
 By using a PVC, the data in your SQLite database will be preserved even if the pods are deleted or moved to another node.
@@ -1210,7 +1255,6 @@ In all cases, ensure you handle SQLite database connections carefully to avoid f
 ## SQL stuff
 
 You can use Python's formatted string literals (also known as f-strings) to make SQL statements more readable. However, you should be very careful when doing so because f-strings can introduce the risk of SQL injection if you're not cautious with how you include variables within your SQL statements. It's crucial never to include untrusted input directly in these strings.
-
 
 For static queries or queries where parameters are not directly included in the string, f-strings can make your SQL more readable. Here’s an example:
 
