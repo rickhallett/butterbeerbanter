@@ -33,7 +33,6 @@ writing_badger = BugBadger(50)
 class ChatClient:
     def __init__(self, host, port):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.settimeout(10)
         self.host = host
         self.port = port
         self.shutdown_event = threading.Event()
@@ -41,60 +40,58 @@ class ChatClient:
     def connect(self):
         try:
             self.client.connect((self.host, self.port))
-            print("Connected to the server.")
+            print(f"Connected to the server on port {self.port}")
             return True
-        except ConnectionRefusedError:
-            print("Unable to connect to the server.")
-            return False
+        except ConnectionRefusedError as ex:
+            # print("Unable to connect to the server.", ex)
+            print('raising')
+            raise ConnectionRefusedError("Unable to connect to the server.")
 
     def receive(self):
-        while not self.shutdown_event.is_set() and listening_badger.is_cool():
+        while not self.shutdown_event.is_set():
             try:
-                if not listening_badger.is_cool():
-                    listening_badger.not_cool()
-                    break
                 message = self.client.recv(1024).decode(ASCII)
                 if message.startswith('Entry forbidden'):
                     self.shutdown(f"Disconnected: {message}", 0)
                 print(message)
-                listening_badger.squeak()
-            except KeyboardInterrupt:
+            except KeyboardInterrupt:  # TODO: does not catch keyboard event
                 self.shutdown("See ya later, shitlords!", 0)
             except ConnectionRefusedError as ex:
                 if ex.errno == errno.ECONNRESET:
                     self.shutdown("Server connection reset", 1)
+            except ConnectionResetError as ex:
+                self.shutdown(ex, 1)
+
+    def write(self):
+        while not self.shutdown_event.is_set():
+            try:
+                message = input("> ")
+                self.client.send(message.encode(ASCII))
+            except KeyboardInterrupt:  # TODO: does not catch keyboard event
+                print("Successfully caught keyboard interrupt; attempting graceful shutdown")
+                self.graceful_shutdown()
+            except ConnectionRefusedError as ex:
+                if ex.errno == errno.ECONNRESET:
+                    self.shutdown("Server connection lost", 1)
+            except ConnectionResetError as ex:
+                self.shutdown(ex, 1)
 
     def graceful_shutdown(self):
         self.client.send("TERM".encode(ASCII))
         response = self.client.recv(1024).decode(ASCII).strip().lower()
         if response == "ACK":
-            print(msg)
             self.shutdown_event.set()
+            self.client.shutdown(socket.SHUT_RDWR)
             self.client.close()
             sys.exit(0)
         else:
             print("Server not ready to disconnect. Please try again.")
 
     def shutdown(self, msg, status):
+        self.client.shutdown(socket.SHUT_RDWR)
         self.client.close()
         print(msg)
         sys.exit(status)
-
-    def write(self):
-        while not self.shutdown_event.is_set() and writing_badger.is_cool():
-            try:
-                if not writing_badger.is_cool():
-                    writing_badger.not_cool()
-                    break
-                message = input("> ")
-                self.client.send(message.encode(ASCII))
-                writing_badger.squeak()
-            except KeyboardInterrupt:
-                print("Successfully caught keyboard interrupt; attempting graceful shutdown")
-                self.graceful_shutdown()
-            except ConnectionRefusedError as ex:
-                if ex.errno == errno.ECONNRESET:
-                    self.shutdown("Server connection lost", 1)
 
     def run(self):
         receive_thread = threading.Thread(target=self.receive)
@@ -112,12 +109,22 @@ def parse_arguments():
 
 if __name__ == '__main__':
     args = parse_arguments()
-    port = args.port
-    chat_client = ChatClient('127.0.0.1', port)
-    try:
-        if chat_client.connect():
-            chat_client.run()
-        else:
-            chat_client.shutdown("Client shutdown")
-    except KeyboardInterrupt:
-        chat_client.shutdown("Client shutdown")
+    initial_port = args.port
+
+
+    def try_port(port):
+        chat_client = ChatClient('127.0.0.1', port)
+        try:
+            if chat_client.connect():
+                chat_client.run()
+            else:
+                chat_client.shutdown("Client shutdown", 1)
+        except KeyboardInterrupt:
+            chat_client.shutdown("Client shutdown", 1)
+        except ConnectionRefusedError as ex:
+            next_port = port + 1
+            print(f"{port} already in use. Trying port {next_port}")
+            try_port(next_port)
+
+
+    try_port(initial_port)

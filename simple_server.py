@@ -95,55 +95,45 @@ class UserManager:
 
 class Client:
 
-    def __init__(self, client_socket, address, broadcaster, disconnecter, username):
+    def __init__(self, client_socket, address, broadcaster, disconnecter, shutdown_server, username):
         self.socket = client_socket
         self.address = address
         self.broadcast = broadcaster
         self.disconnect = disconnecter
+        self.shutdown_server = shutdown_server
         self.username = username
         self.has_left = False
         self.shutdown_event = threading.Event()
-        self.receive_thread = threading.Thread(target=self.listen, daemon=True)
+        self.receive_thread = threading.Thread(target=self.listen)
         self.receive_thread.start()
 
     def listen(self):
         last_message = None
-        lives = 3
         while not self.shutdown_event.is_set():
             try:
                 message = self.socket.recv(1024).decode(ASCII).strip()
-                if message == 'TERM':
-                    print("received TERM")
-                    self.close()
-                if message == "":
-                    lives -= 1
-                if lives == 0:
-                    self.close()
                 if message != last_message:
                     self.broadcast(self, message)
                     last_message = message
-            except KeyboardInterrupt:
+            except KeyboardInterrupt:  # TODO: does not catch keyboard event
+                print("keyboard interrupt")
+                self.shutdown_server()
                 self.close()
-            except ConnectionResetError as e:
-                print("CONNECTION RESET ERROR!!!!", e)
+            except (ConnectionResetError, BrokenPipeError, ConnectionError) as e:
+                print(e)
                 self.close(can_msg=False)
-            except BrokenPipeError as e:
-                print("BROKEN PIPE ERROR!!!", e)
-                self.close()
-            except ConnectionError as e:
-                print("CONNECTION ERROR!!!", e)
-                self.close()
-            except OSError as ex:
-                if ex.errno == errno.EBADFD:
-                    print("BAD FILE DESCRIPTOR!", ex)
-                else:
-                    print("SOME OTHER OS BULLSHIT!!", ex)
+            except OSError as e:
+                if e.errno == errno.EBADF:
+                    print(e)
+                    self.close(can_msg=False)
 
     def send(self, msg):
         try:
             self.socket.send(msg.encode(ASCII))
         except AttributeError as e:
             print("ATTRIBUTE ERROR", e, msg)
+        except BrokenPipeError as ex:
+            print(ex)
 
     def recv(self):
         return self.socket.recv(1024).decode(ASCII).lower().strip()
@@ -151,7 +141,12 @@ class Client:
     def close(self, can_msg=True):
         self.shutdown_event.set()
         self.disconnect(self, can_msg)
-        self.socket.close()
+        try:
+            self.socket.shutdown(socket.SHUT_RDWR)
+            self.socket.close()
+        except OSError as ex:
+            if ex.errno == errno.ENOTCONN:
+                print("Socket no longer connected")
 
 
 class ChatServer:
@@ -166,37 +161,32 @@ class ChatServer:
         print(f"Server is listening on port {self.port}...")
 
     def run(self):
-        tester = 0
         while True:
             client_socket, address = self.server.accept()
-            tester += 1
-            # TODO: authentication logic, get username for announcement
 
-            if True:
-                client = Client(client_socket, address, self.broadcast, self.disconnect, "tester{0}".format(tester))
-                self.clients.append(client)
-                self.announce(client, f'{client.username} has joined the chatroom')
-                print(f"Connected with {str(address)}")
-                continue
+            # if True:
+            #     client = Client(client_socket, address, self.broadcast, self.disconnect, self.shutdown,
+            #                     "tester{0}".format(tester))
+            #     self.clients.append(client)
+            #     self.announce(client, f'{client.username} has joined the chatroom')
+            #     print(f"Connected with {str(address)}")
+            #     continue
 
             client_socket.send("Login or Registration? (L) (R)".encode(ASCII))
             choice = client_socket.recv(1024).decode().strip().lower()
             try:
                 username, status = self.user_manager.handle_choice(client_socket, choice)
-            except UserManagerError as e:
+            except (sqlite3.DataError, sqlite3.DatabaseError) as e:
                 if e == 'UNIQUE constraint failed: users.username':  # TODO check string
                     self.reject_connection(client_socket, "Username already taken")
-            except BrokenPipeError as e:
-                print("BROKEN PIPE ERROR!!", e)
-            except ConnectionResetError as e:
-                print("CONNECTION RESET ERROR!!!", e)
-            except ConnectionError as e:
-                print("CONNECTION ERROR!!!", e)
+            except (BrokenPipeError, ConnectionResetError, ConnectionError) as e:
+                print(e)
+                self.disconnect(client_socket, can_msg=True, shutdown=True)
 
             if status != 'success':
                 self.reject_connection(client_socket, status)
             else:
-                client = Client(client_socket, address, self.broadcast, self.disconnect, username)
+                client = Client(client_socket, address, self.broadcast, self.disconnect, self.shutdown, username)
                 self.clients.append(client)
                 self.announce(client, f'{client.username} has joined the chatroom')
                 print(f"Connected with {str(address)}")
@@ -204,6 +194,7 @@ class ChatServer:
     @staticmethod
     def reject_connection(client_socket, reason):
         client_socket.send(f'Entry forbidden. ${reason}\nDisconnected'.encode(ASCII))
+        client_socket.shutdown(socket.SHUT_RDWR)
         client_socket.close()
 
     def announce(self, joiner, message):
@@ -227,7 +218,7 @@ class ChatServer:
 
     def shutdown(self, msg):
         for client in self.clients:
-            client.send(msg.encode(ASCII))
+            client.send(msg)
             client.close()
 
 
@@ -239,32 +230,23 @@ def parse_arguments():
 
 
 if __name__ == '__main__':
-    try:
-        args = parse_arguments()
-        port = args.port
-        chat_server = ChatServer('127.0.0.1', port, 'chat_server.db')  # TODO: auto port?
-        chat_server.run()
-    except KeyboardInterrupt:
-        print("Closing server. Next time!")
-        chat_server.shutdown("Server has shutdown. Disconnected.")
-        sys.exit(0)
-    except OSError as ex:
-        if ex.errno == errno.EADDRINUSE:
-            print(ex)
+    args = parse_arguments()
+    initial_port = args.port
 
-# if __name__ == '__main__':
-#     def try_port(next_port=None):
-#         try:
-#             args = parse_arguments()
-#             port = next_port or args.port
-#             chat_server = ChatServer('127.0.0.1', port, 'chat_server.db')  # TODO: auto port?
-#             chat_server.run()
-#         except KeyboardInterrupt:
-#             print("Closing server. Next time!")
-#             chat_server.shutdown("Server has shutdown. Disconnected.")
-#             sys.exit(0)
-#         except OSError as ex:
-#             if ex.errno == errno.EADDRINUSE:
-#                 new_port = port + 1
-#                 print(f'{port} already in use. Trying port {new_port}')
-#                 try_port(new_port)
+
+    def try_port(port):
+        try:
+            chat_server = ChatServer('127.0.0.1', port, 'chat_server.db')  # TODO: auto port?
+            chat_server.run()
+        except KeyboardInterrupt:  # TODO: does not catch keyboard event
+            print("Closing server. Next time!")
+            chat_server.shutdown("Server has shutdown. Disconnected.")
+            sys.exit(0)
+        except OSError as ex:
+            if ex.errno == errno.EADDRINUSE:
+                next_port = port + 1
+                print(f'{port} already in use. Trying port {next_port}')
+                try_port(next_port)
+
+
+    try_port(initial_port)
