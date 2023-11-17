@@ -13,8 +13,28 @@ max_loops = 10
 listening_badger = BugBadger(50)
 
 
-class UserManagerError(BaseException):
+class UserManagerError(BaseException):  # delete this BS
     pass
+
+
+class Debug:
+    def __init__(self):
+        self._bypass_db = False
+
+    @property
+    def bypass_db(self, val):
+        return self._bypass_db
+
+    @bypass_db.setter
+    def bypass_db(self, val):
+        if type(val) is bool:
+            self._bypass_db = val
+        else:
+            raise AttributeError(f"type(val) must be bool")
+
+
+debug = Debug()
+debug.bypass_db = True
 
 
 class UserManager:
@@ -37,8 +57,8 @@ class UserManager:
         username = client.recv(1024).decode().strip().lower()
         client.send('Enter password'.encode(ASCII))
         password = client.recv(1024).decode().strip().lower()
-
         status = None
+
         try:
             if choice == 'r':
                 status = self.register_new_user(username, password)
@@ -83,31 +103,32 @@ class Client:
         self.username = username
         self.has_left = False
         self.shutdown_event = threading.Event()
-        self.receive_thread = threading.Thread(target=self.listen)
+        self.receive_thread = threading.Thread(target=self.listen, daemon=True)
         self.receive_thread.start()
 
     def listen(self):
         last_message = None
-        while not self.shutdown_event.is_set() and listening_badger.is_cool():
+        lives = 3
+        while not self.shutdown_event.is_set():
             try:
-                if not listening_badger.is_cool():
-                    listening_badger.not_cool()
-                    break
                 message = self.socket.recv(1024).decode(ASCII).strip()
-                print(message)
+                if message == 'TERM':
+                    print("received TERM")
+                    self.close()
+                if message == "":
+                    lives -= 1
+                if lives == 0:
+                    self.close()
                 if message != last_message:
-                    # are we getting something else here? after client keyboard interrupt, for a while message == "" on multiple iterations
                     self.broadcast(self, message)
                     last_message = message
-                listening_badger.squeak()
             except KeyboardInterrupt:
-                # self.disconnect() #  dont call
                 self.close()
-            except ConnectionResetError as ex:
-                print("CONNECTION RESET ERROR!!!!", ex)
+            except ConnectionResetError as e:
+                print("CONNECTION RESET ERROR!!!!", e)
                 self.close(can_msg=False)
-            except BrokenPipeError as ex:
-                print("BROKEN PIPE ERROR!!!", ex)
+            except BrokenPipeError as e:
+                print("BROKEN PIPE ERROR!!!", e)
                 self.close()
             except ConnectionError as e:
                 print("CONNECTION ERROR!!!", e)
@@ -121,8 +142,8 @@ class Client:
     def send(self, msg):
         try:
             self.socket.send(msg.encode(ASCII))
-        except AttributeError as ex:
-            print("ATTRIBUTE ERROR", ex, msg)
+        except AttributeError as e:
+            print("ATTRIBUTE ERROR", e, msg)
 
     def recv(self):
         return self.socket.recv(1024).decode(ASCII).lower().strip()
@@ -145,9 +166,19 @@ class ChatServer:
         print(f"Server is listening on port {self.port}...")
 
     def run(self):
+        tester = 0
         while True:
             client_socket, address = self.server.accept()
+            tester += 1
             # TODO: authentication logic, get username for announcement
+
+            if True:
+                client = Client(client_socket, address, self.broadcast, self.disconnect, "tester{0}".format(tester))
+                self.clients.append(client)
+                self.announce(client, f'{client.username} has joined the chatroom')
+                print(f"Connected with {str(address)}")
+                continue
+
             client_socket.send("Login or Registration? (L) (R)".encode(ASCII))
             choice = client_socket.recv(1024).decode().strip().lower()
             try:
@@ -193,7 +224,6 @@ class ChatServer:
             self.announce(client, f'{client.username} has left the chatroom')
             if can_msg:
                 client.send('Disconnected')
-            client.close()
 
     def shutdown(self, msg):
         for client in self.clients:

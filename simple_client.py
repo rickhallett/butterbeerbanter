@@ -33,6 +33,7 @@ writing_badger = BugBadger(50)
 class ChatClient:
     def __init__(self, host, port):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client.settimeout(10)
         self.host = host
         self.port = port
         self.shutdown_event = threading.Event()
@@ -63,10 +64,20 @@ class ChatClient:
                 if ex.errno == errno.ECONNRESET:
                     self.shutdown("Server connection reset", 1)
 
+    def graceful_shutdown(self):
+        self.client.send("TERM".encode(ASCII))
+        response = self.client.recv(1024).decode(ASCII).strip().lower()
+        if response == "ACK":
+            print(msg)
+            self.shutdown_event.set()
+            self.client.close()
+            sys.exit(0)
+        else:
+            print("Server not ready to disconnect. Please try again.")
+
     def shutdown(self, msg, status):
-        print(msg)
-        self.shutdown_event.set()
         self.client.close()
+        print(msg)
         sys.exit(status)
 
     def write(self):
@@ -80,8 +91,7 @@ class ChatClient:
                 writing_badger.squeak()
             except KeyboardInterrupt:
                 print("Successfully caught keyboard interrupt; attempting graceful shutdown")
-                self.client.send("TERM".encode(ASCII))
-                self.shutdown("See ya later, shitlords", 0)
+                self.graceful_shutdown()
             except ConnectionRefusedError as ex:
                 if ex.errno == errno.ECONNRESET:
                     self.shutdown("Server connection lost", 1)
