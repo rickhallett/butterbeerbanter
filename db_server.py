@@ -3,8 +3,14 @@ import sys
 import threading
 import sqlite3
 import argparse
+import errno
+
+from simple_client import BugBadger
 
 ASCII = 'ascii'
+max_loops = 10
+
+listening_badger = BugBadger(50)
 
 
 class UserManagerError(BaseException):
@@ -36,7 +42,6 @@ class UserManager:
         try:
             if choice == 'r':
                 status = self.register_new_user(username, password)
-                print('status after register', status)
                 if status != 'success':
                     status = f'Registration failed: {status}'
 
@@ -52,7 +57,6 @@ class UserManager:
         return username, status
 
     def register_new_user(self, username, password):
-        print('registering')
         try:
             self.cursor.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, password))
             self.conn.commit()
@@ -77,28 +81,55 @@ class Client:
         self.broadcast = broadcaster
         self.disconnect = disconnecter
         self.username = username
+        self.has_left = False
         self.shutdown_event = threading.Event()
-        self.receive_thread = threading.Thread(target=self.listen, daemon=True)
+        self.receive_thread = threading.Thread(target=self.listen)
         self.receive_thread.start()
 
     def listen(self):
-        while not self.shutdown_event.is_set():
+        last_message = None
+        while not self.shutdown_event.is_set() and listening_badger.is_cool():
             try:
+                if not listening_badger.is_cool():
+                    listening_badger.not_cool()
+                    break
                 message = self.socket.recv(1024).decode(ASCII).strip()
                 print(message)
-                self.broadcast(self, message)
+                if message != last_message:
+                    # are we getting something else here? after client keyboard interrupt, for a while message == "" on multiple iterations
+                    self.broadcast(self, message)
+                    last_message = message
+                listening_badger.squeak()
             except KeyboardInterrupt:
-                self.disconnect()
-                self.shutdown_event.set()
+                # self.disconnect() #  dont call
+                self.close()
+            except ConnectionResetError as ex:
+                print("CONNECTION RESET ERROR!!!!", ex)
+                self.close(can_msg=False)
+            except BrokenPipeError as ex:
+                print("BROKEN PIPE ERROR!!!", ex)
+                self.close()
+            except ConnectionError as e:
+                print("CONNECTION ERROR!!!", e)
+                self.close()
+            except OSError as ex:
+                if ex.errno == errno.EBADFD:
+                    print("BAD FILE DESCRIPTOR!", ex)
+                else:
+                    print("SOME OTHER OS BULLSHIT!!", ex)
 
     def send(self, msg):
-        self.socket.send(msg.encode(ASCII))
+        try:
+            self.socket.send(msg.encode(ASCII))
+        except AttributeError as ex:
+            print("ATTRIBUTE ERROR", ex, msg)
 
     def recv(self):
         return self.socket.recv(1024).decode(ASCII).lower().strip()
 
-    def close(self):
-        self.disconnect(self)
+    def close(self, can_msg=True):
+        self.shutdown_event.set()
+        self.disconnect(self, can_msg)
         self.socket.close()
 
 
@@ -122,14 +153,19 @@ class ChatServer:
             try:
                 username, status = self.user_manager.handle_choice(client_socket, choice)
             except UserManagerError as e:
-                if e == 'UNIQUE constraint failed: users.username':
+                if e == 'UNIQUE constraint failed: users.username':  # TODO check string
                     self.reject_connection(client_socket, "Username already taken")
+            except BrokenPipeError as e:
+                print("BROKEN PIPE ERROR!!", e)
+            except ConnectionResetError as e:
+                print("CONNECTION RESET ERROR!!!", e)
+            except ConnectionError as e:
+                print("CONNECTION ERROR!!!", e)
 
             if status != 'success':
                 self.reject_connection(client_socket, status)
             else:
                 client = Client(client_socket, address, self.broadcast, self.disconnect, username)
-                print(client.username)
                 self.clients.append(client)
                 self.announce(client, f'{client.username} has joined the chatroom')
                 print(f"Connected with {str(address)}")
@@ -145,16 +181,19 @@ class ChatServer:
                 client.send(message)
 
     def broadcast(self, sender, message):
-        print('broadcast', sender, message)
+        print('broadcast', message)
         for client in self.clients:
             if client is not sender:
                 client.send(str(f'{sender.username}: {message}'))
 
-    def disconnect(self, client):
-        self.clients.remove(client)
-        self.announce(f'{client.username} has left the chatroom')
-        client.send('Disconnected'.encode(ASCII))
-        client.close()
+    def disconnect(self, client, can_msg):
+        if not client.has_left:
+            self.clients.remove(client)
+            client.has_left = True
+            self.announce(client, f'{client.username} has left the chatroom')
+            if can_msg:
+                client.send('Disconnected')
+            client.close()
 
     def shutdown(self, msg):
         for client in self.clients:
@@ -173,9 +212,29 @@ if __name__ == '__main__':
     try:
         args = parse_arguments()
         port = args.port
-        chat_server = ChatServer('127.0.0.1', port, 'chat_server.db')
+        chat_server = ChatServer('127.0.0.1', port, 'chat_server.db')  # TODO: auto port?
         chat_server.run()
     except KeyboardInterrupt:
         print("Closing server. Next time!")
         chat_server.shutdown("Server has shutdown. Disconnected.")
         sys.exit(0)
+    except OSError as ex:
+        if ex.errno == errno.EADDRINUSE:
+            print(ex)
+
+# if __name__ == '__main__':
+#     def try_port(next_port=None):
+#         try:
+#             args = parse_arguments()
+#             port = next_port or args.port
+#             chat_server = ChatServer('127.0.0.1', port, 'chat_server.db')  # TODO: auto port?
+#             chat_server.run()
+#         except KeyboardInterrupt:
+#             print("Closing server. Next time!")
+#             chat_server.shutdown("Server has shutdown. Disconnected.")
+#             sys.exit(0)
+#         except OSError as ex:
+#             if ex.errno == errno.EADDRINUSE:
+#                 new_port = port + 1
+#                 print(f'{port} already in use. Trying port {new_port}')
+#                 try_port(new_port)
